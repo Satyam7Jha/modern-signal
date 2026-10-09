@@ -6,16 +6,17 @@ import {
   ListTodoIcon,
   PlusIcon,
   SearchXIcon,
-  UploadIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { StatCard } from "@/components/stat-card";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getUser } from "@/lib/supabase/server";
+import { getTaskSummary } from "@/lib/task-summary";
 import {
   TASK_COLUMNS,
   escapeLikePattern,
+  groupTasks,
   hasActiveFilters,
   isoDate,
   parseFilters,
@@ -30,7 +31,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
   const supabase = await createClient();
   const today = isoDate();
 
-  // RLS limits both queries to the signed-in user's rows; we only hide soft-deleted ones.
+  // RLS limits this to the signed-in user's rows; we only hide soft-deleted ones.
   let query = supabase.from("tasks").select(TASK_COLUMNS).is("deleted_at", null);
 
   if (filters.q) query = query.ilike("search_text", `%${escapeLikePattern(filters.q)}%`);
@@ -40,83 +41,63 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
   if (filters.due === "today") query = query.eq("due_date", today);
   if (filters.due === "week") query = query.gte("due_date", today).lte("due_date", isoDate(7));
 
-  const [list, summary] = await Promise.all([
+  const [list, summary, user] = await Promise.all([
     query
       .order("due_date")
       .order("priority")
       .order("created_at")
       .limit(500)
       .overrideTypes<Task[], { merge: false }>(),
-    // Only two small columns, for the stat cards (independent of the filters).
-    supabase.from("tasks").select("status, due_date").is("deleted_at", null),
+    getTaskSummary(), // shared with the layout via React cache()
+    getUser(),
   ]);
 
   // Shown by error.tsx, which offers a retry.
-  if (list.error || summary.error) throw new Error("Could not load your tasks.");
+  if (list.error) throw new Error("Could not load your tasks.");
 
   const tasks = list.data;
-  const all = summary.data;
-  const open = all.filter((task) => task.status !== "done");
-  const stats = {
-    open: open.length,
-    today: open.filter((task) => task.due_date === today).length,
-    overdue: open.filter((task) => task.due_date < today).length,
-    done: all.length - open.length,
-  };
-
   const view = activeView(filters);
   const filtered = hasActiveFilters(filters);
-  const todayLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(new Date());
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-primary">{todayLabel}</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight">{view?.label ?? "Filtered tasks"}</h1>
+    // On large screens the page fills the viewport and only the task table scrolls.
+    <div className="flex flex-col gap-5 lg:min-h-0 lg:flex-1">
+      <header className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <Greeting name={user?.email?.split("@")[0] ?? ""} open={summary.open} dueToday={summary.today} overdue={summary.overdue} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:w-[40rem]">
+          <StatCard href={viewHref("")} label="Open tasks" value={summary.open} icon={ListTodoIcon} tone="indigo" active={view?.id === "all"} />
+          <StatCard href={viewHref("due=today")} label="Due today" value={summary.today} icon={CalendarCheckIcon} tone="amber" active={view?.id === "today"} />
+          <StatCard href={viewHref("due=overdue")} label="Overdue" value={summary.overdue} icon={AlarmClockIcon} tone="red" active={view?.id === "overdue"} />
+          <StatCard
+            href={viewHref("status=done")}
+            label="Completed"
+            value={summary.done}
+            icon={CircleCheckIcon}
+            tone="emerald"
+            active={view?.id === "done"}
+            progress={summary.all ? summary.done / summary.all : 0}
+          />
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link href="/import">
-              <UploadIcon /> Import CSV
-            </Link>
-          </Button>
-          <Button asChild className="lg:hidden">
-            <Link href="/tasks/new">
-              <PlusIcon /> New task
-            </Link>
-          </Button>
+      </header>
+
+      <section
+        aria-labelledby="task-list-heading"
+        className="flex flex-col overflow-hidden rounded-xl border bg-background shadow-sm lg:min-h-0 lg:flex-1"
+      >
+        <div className="flex flex-col gap-3 border-b p-3 lg:flex-row lg:items-center">
+          <h2 id="task-list-heading" className="flex shrink-0 items-center gap-2 pl-1 font-semibold tracking-tight">
+            {view?.label ?? "Filtered tasks"}
+            <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+              {tasks.length}
+            </span>
+          </h2>
+          <TaskToolbar filters={filters} />
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard href={viewHref("")} label="Open" value={stats.open} icon={ListTodoIcon} tone="indigo" active={view?.id === "all"} hint="Not done yet" />
-        <StatCard href={viewHref("due=today")} label="Due today" value={stats.today} icon={CalendarCheckIcon} tone="amber" active={view?.id === "today"} hint="Open tasks due today" />
-        <StatCard href={viewHref("due=overdue")} label="Overdue" value={stats.overdue} icon={AlarmClockIcon} tone="red" active={view?.id === "overdue"} hint={stats.overdue ? "Past their due date" : "Nothing overdue"} />
-        <StatCard
-          href={viewHref("status=done")}
-          label="Completed"
-          value={stats.done}
-          icon={CircleCheckIcon}
-          tone="emerald"
-          active={view?.id === "done"}
-          progress={all.length ? stats.done / all.length : 0}
-        />
-      </div>
-
-      <section className="space-y-3">
-        <TaskToolbar filters={filters} />
 
         {tasks.length > 0 ? (
-          <>
-            <TaskTable tasks={tasks} today={today} />
-            <p className="px-1 text-xs text-muted-foreground">
-              {tasks.length === 1 ? "1 task" : `${tasks.length} tasks`}
-              {filtered && " match these filters"} · sorted by due date, then priority
-            </p>
-          </>
+          <TaskTable groups={groupTasks(tasks, today)} today={today} />
         ) : filtered ? (
-          <Empty className="border bg-background">
+          <Empty className="flex-1 py-16">
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <SearchXIcon />
@@ -131,7 +112,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
             </EmptyContent>
           </Empty>
         ) : (
-          <Empty className="border bg-background py-16">
+          <Empty className="flex-1 py-16">
             <EmptyHeader>
               <EmptyMedia variant="icon">
                 <ListTodoIcon />
@@ -154,6 +135,36 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
           </Empty>
         )}
       </section>
+    </div>
+  );
+}
+
+function Greeting({ name, open, dueToday, overdue }: { name: string; open: number; dueToday: number; overdue: number }) {
+  const now = new Date();
+  const hour = now.getHours();
+  const salutation = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+  const date = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric" }).format(now);
+
+  const parts = [`${open} open`];
+  if (dueToday) parts.push(`${dueToday} due today`);
+  if (overdue) parts.push(`${overdue} overdue`);
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="truncate text-2xl font-semibold tracking-tight">
+          {salutation}
+          {name && <span className="text-muted-foreground">, {name}</span>}
+        </h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          <span className="font-medium text-primary">{date}</span> · {parts.join(" · ")}
+        </p>
+      </div>
+      <Button asChild className="shadow-md shadow-primary/25 lg:hidden">
+        <Link href="/tasks/new">
+          <PlusIcon /> New task
+        </Link>
+      </Button>
     </div>
   );
 }

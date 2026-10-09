@@ -64,3 +64,60 @@ export function isoDate(offsetDays = 0, from = new Date()): string {
   const day = String(date.getDate()).padStart(2, "0");
   return `${date.getFullYear()}-${month}-${day}`;
 }
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Whole days from `today` to `isoDay` (both YYYY-MM-DD); negative means in the past. */
+export function daysBetween(today: string, isoDay: string): number {
+  return Math.round((Date.parse(`${isoDay}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS);
+}
+
+const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+const longDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+
+/** A human due label: "Today", "Tomorrow", "In 3 days", "2 days ago", or a date further out. */
+export function relativeDue(dueDate: string, today: string): string {
+  const days = daysBetween(today, dueDate);
+  if (days === 0) return "Today";
+  if (days === 1) return "Tomorrow";
+  if (days === -1) return "Yesterday";
+  if (days > 1 && days < 7) return `In ${days} days`;
+  if (days < -1 && days > -7) return `${-days} days ago`;
+  const date = new Date(`${dueDate}T00:00:00Z`);
+  return dueDate.slice(0, 4) === today.slice(0, 4) ? shortDate.format(date) : longDate.format(date);
+}
+
+export const TASK_GROUPS = {
+  overdue: "Overdue",
+  today: "Today",
+  tomorrow: "Tomorrow",
+  week: "Next 7 days",
+  later: "Later",
+  done: "Completed",
+} as const;
+export type TaskGroupId = keyof typeof TASK_GROUPS;
+export type TaskGroup = { id: TaskGroupId; label: string; tasks: Task[] };
+
+/**
+ * Splits tasks (already sorted by due date, then priority) into sections.
+ * Open tasks go by due date; completed tasks are collected at the end.
+ */
+export function groupTasks(tasks: Task[], today: string): TaskGroup[] {
+  const buckets: Record<TaskGroupId, Task[]> = { overdue: [], today: [], tomorrow: [], week: [], later: [], done: [] };
+
+  for (const task of tasks) {
+    const days = daysBetween(today, task.due_date);
+    const id: TaskGroupId =
+      task.status === "done" ? "done"
+      : days < 0 ? "overdue"
+      : days === 0 ? "today"
+      : days === 1 ? "tomorrow"
+      : days <= 7 ? "week"
+      : "later";
+    buckets[id].push(task);
+  }
+
+  return (Object.keys(TASK_GROUPS) as TaskGroupId[])
+    .filter((id) => buckets[id].length > 0)
+    .map((id) => ({ id, label: TASK_GROUPS[id], tasks: buckets[id] }));
+}

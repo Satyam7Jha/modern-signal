@@ -5,11 +5,13 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useOptimistic, useRef, useTransition } from "react";
 import { PriorityDot, PRIORITY_LABELS, STATUS_ICONS } from "@/components/task-badges";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { STATUSES, STATUS_LABELS } from "@/lib/task-fields";
 import { DUE_FILTERS, type TaskFilters } from "@/lib/tasks";
+import { TASK_SEARCH_ID } from "./command-menu";
 
 const ALL = "all"; // Radix Select doesn't allow "" as an item value
 const SEARCH_DELAY_MS = 300;
@@ -65,12 +67,13 @@ export function TaskToolbar({ filters }: { filters: TaskFilters }) {
   }
 
   return (
-    <div role="search" className="flex flex-col gap-2 rounded-xl border bg-background p-2 shadow-xs sm:flex-row sm:items-center">
+    <div role="search" className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center">
       <InputGroup className="sm:flex-1">
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>
         <InputGroupInput
+          id={TASK_SEARCH_ID}
           ref={searchRef}
           type="search"
           aria-label="Search title or notes"
@@ -84,11 +87,9 @@ export function TaskToolbar({ filters }: { filters: TaskFilters }) {
             }
           }}
         />
-        {pending && (
-          <InputGroupAddon align="inline-end">
-            <Spinner />
-          </InputGroupAddon>
-        )}
+        <InputGroupAddon align="inline-end">
+          {pending ? <Spinner /> : <Kbd className="hidden sm:inline-flex">/</Kbd>}
+        </InputGroupAddon>
       </InputGroup>
 
       <div className="grid grid-cols-3 gap-2 sm:flex">

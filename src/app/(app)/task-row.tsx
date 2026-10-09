@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useOptimistic, useTransition } from "react";
 import { toast } from "sonner";
 import { formatDueDate, PriorityBadge, PriorityDot, STATUS_ICONS, StatusBadge } from "@/components/task-badges";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { isTaskStatus, STATUSES, STATUS_LABELS, type TaskStatus } from "@/lib/task-fields";
-import type { Task } from "@/lib/tasks";
+import { relativeDue, type Task } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 import { deleteTask, restoreTask, setTaskStatus } from "./tasks/actions";
 
@@ -32,6 +33,9 @@ export function TaskRow({ task, today }: { task: Task; today: string }) {
 
   const done = optimistic.status === "done";
   const overdue = !done && task.due_date < today;
+  const dueToday = !done && task.due_date === today;
+  const dueLabel = relativeDue(task.due_date, today);
+  const dueTone = overdue ? "font-medium text-destructive" : dueToday ? "font-medium text-amber-600 dark:text-amber-400" : "text-muted-foreground";
 
   function changeStatus(status: TaskStatus) {
     startTransition(async () => {
@@ -57,7 +61,7 @@ export function TaskRow({ task, today }: { task: Task; today: string }) {
   }
 
   return (
-    <TableRow className="group">
+    <TableRow className={cn("group transition-colors", done && "bg-muted/20")}>
       <TableCell className="pl-4">
         <Checkbox
           checked={done}
@@ -80,19 +84,21 @@ export function TaskRow({ task, today }: { task: Task; today: string }) {
         {/* On small screens the Due / Priority / Status columns are hidden, so show them here. */}
         <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground md:hidden">
           <PriorityDot priority={task.priority} />
-          <span className={cn("sm:hidden", overdue && "font-medium text-destructive")}>
-            {formatDueDate(task.due_date)}
-          </span>
+          <span className={cn("sm:hidden", dueTone)}>{dueLabel}</span>
           <span>{STATUS_LABELS[optimistic.status]}</span>
         </div>
       </TableCell>
 
       <TableCell className="hidden sm:table-cell">
-        <span className={cn("flex items-center gap-1.5 text-sm", overdue ? "font-medium text-destructive" : "text-muted-foreground")}>
-          <CalendarIcon className="size-3.5" />
-          {formatDueDate(task.due_date)}
-        </span>
-        {overdue && <span className="text-xs text-destructive">Overdue</span>}
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className={cn("inline-flex items-center gap-1.5 text-sm", dueTone)}>
+              <CalendarIcon className="size-3.5" />
+              {dueLabel}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Due {formatDueDate(task.due_date)}</TooltipContent>
+        </Tooltip>
       </TableCell>
 
       <TableCell className="hidden md:table-cell">

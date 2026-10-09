@@ -1,51 +1,47 @@
 "use client";
 
-import {
-  AlarmClockIcon,
-  CalendarCheckIcon,
-  CalendarRangeIcon,
-  CircleCheckIcon,
-  CircleDashedIcon,
-  ListTodoIcon,
-  PlusIcon,
-  UploadIcon,
-  type LucideIcon,
-} from "lucide-react";
+import { PlusIcon, SearchIcon, UploadIcon, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { AppLogo } from "@/components/app-logo";
 import { Button } from "@/components/ui/button";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
+import type { TaskSummary } from "@/lib/task-summary";
 import { cn } from "@/lib/utils";
-import { VIEWS, viewHref, type ViewId } from "@/lib/views";
+import { VIEWS, viewHref } from "@/lib/views";
+import { OPEN_COMMAND_MENU, VIEW_ICONS } from "./command-menu";
 import { UserMenu } from "./user-menu";
 
-const VIEW_ICONS: Record<ViewId, LucideIcon> = {
-  all: ListTodoIcon,
-  today: CalendarCheckIcon,
-  week: CalendarRangeIcon,
-  overdue: AlarmClockIcon,
-  in_progress: CircleDashedIcon,
-  done: CircleCheckIcon,
-};
-
-export function AppSidebar({ email }: { email: string }) {
+export function AppSidebar({ email, summary }: { email: string; summary: TaskSummary | null }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentQuery = pathname === "/" ? searchParams.toString() : null;
 
   return (
-    <aside className="sticky top-0 hidden h-svh w-64 shrink-0 flex-col border-r bg-background lg:flex">
+    <aside className="hidden w-64 shrink-0 flex-col border-r bg-background/70 backdrop-blur lg:flex">
       <div className="flex h-16 items-center px-5">
         <Link href="/" aria-label="Task List home">
           <AppLogo />
         </Link>
       </div>
 
-      <div className="px-3">
-        <Button asChild className="w-full justify-start shadow-sm">
+      <div className="space-y-2 px-3">
+        <Button asChild className="w-full justify-start shadow-sm shadow-primary/25">
           <Link href="/tasks/new">
             <PlusIcon /> New task
+            <Kbd className="ml-auto bg-white/15 text-primary-foreground">N</Kbd>
           </Link>
+        </Button>
+        <Button
+          variant="outline"
+          className="w-full justify-start text-muted-foreground"
+          onClick={() => window.dispatchEvent(new Event(OPEN_COMMAND_MENU))}
+        >
+          <SearchIcon /> Search…
+          <KbdGroup className="ml-auto">
+            <Kbd>⌘</Kbd>
+            <Kbd>K</Kbd>
+          </KbdGroup>
         </Button>
       </div>
 
@@ -57,6 +53,8 @@ export function AppSidebar({ email }: { email: string }) {
               href={viewHref(view.query)}
               icon={VIEW_ICONS[view.id]}
               active={currentQuery === view.query}
+              count={summary?.[view.id]}
+              alert={view.id === "overdue" && Boolean(summary?.overdue)}
             >
               {view.label}
             </SidebarLink>
@@ -79,8 +77,8 @@ export function AppSidebar({ email }: { email: string }) {
 
 function SidebarSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-1">
-      <p className="px-2.5 pb-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">{title}</p>
+    <div className="space-y-0.5">
+      <p className="px-2.5 pb-1.5 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">{title}</p>
       {children}
     </div>
   );
@@ -90,11 +88,15 @@ function SidebarLink({
   href,
   icon: Icon,
   active,
+  count,
+  alert = false,
   children,
 }: {
   href: string;
   icon: LucideIcon;
   active: boolean;
+  count?: number;
+  alert?: boolean;
   children: React.ReactNode;
 }) {
   return (
@@ -102,13 +104,23 @@ function SidebarLink({
       href={href}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+        "group flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
         "focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none",
         active && "bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary",
       )}
     >
       <Icon className="size-4" />
       {children}
+      {count !== undefined && count > 0 && (
+        <span
+          className={cn(
+            "ml-auto min-w-5 rounded-full px-1.5 text-center text-xs tabular-nums",
+            alert ? "bg-destructive/10 font-medium text-destructive" : "text-muted-foreground",
+          )}
+        >
+          {count}
+        </span>
+      )}
     </Link>
   );
 }
