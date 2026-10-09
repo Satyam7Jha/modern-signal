@@ -1,13 +1,25 @@
+import { ArrowLeftIcon, FileQuestionIcon } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 
 export default function NotFound() {
   return (
-    <div className="card px-6 py-10 text-center">
-      <p className="font-medium">Task not found.</p>
-      <p className="mt-1 text-sm text-slate-500">It may have been deleted, or it belongs to another account.</p>
-      <Link href="/" className="btn mt-4">
-        Back to tasks
-      </Link>
-    </div>
+    <Empty className="border bg-background">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <FileQuestionIcon />
+        </EmptyMedia>
+        <EmptyTitle>Task not found</EmptyTitle>
+        <EmptyDescription>It may have been deleted, or it belongs to another account.</EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <Button variant="outline" asChild>
+          <Link href="/">
+            <ArrowLeftIcon /> Back to tasks
+          </Link>
+        </Button>
+      </EmptyContent>
+    </Empty>
   );
 }

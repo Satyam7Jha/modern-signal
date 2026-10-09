@@ -1,38 +1,28 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AppLogo } from "@/components/app-logo";
 import { getUser } from "@/lib/supabase/server";
-import { signOut } from "../login/actions";
+import { MainNav } from "./main-nav";
+import { UserMenu } from "./user-menu";
 
 export default async function AppLayout({ children }: LayoutProps<"/">) {
   const user = await getUser();
   if (!user) redirect("/login");
 
   return (
-    <>
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3">
-          <Link href="/" className="font-semibold">
-            Task List
+    <div className="flex min-h-full flex-1 flex-col bg-muted/40">
+      <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur supports-backdrop-filter:bg-background/60">
+        <div className="mx-auto flex h-14 w-full max-w-5xl items-center gap-4 px-4 sm:gap-6">
+          <Link href="/" aria-label="Task List home">
+            <AppLogo />
           </Link>
-          <nav className="flex gap-4 text-sm">
-            <Link href="/" className="text-slate-600 hover:text-slate-900">
-              Tasks
-            </Link>
-            <Link href="/import" className="text-slate-600 hover:text-slate-900">
-              Import CSV
-            </Link>
-          </nav>
-          <div className="ml-auto flex items-center gap-3 text-sm">
-            <span className="text-slate-500">{user.email}</span>
-            <form action={signOut}>
-              <button type="submit" className="text-slate-600 hover:text-slate-900 hover:underline">
-                Sign out
-              </button>
-            </form>
+          <MainNav />
+          <div className="ml-auto">
+            <UserMenu email={user.email ?? ""} />
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-6">{children}</main>
-    </>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">{children}</main>
+    </div>
   );
 }

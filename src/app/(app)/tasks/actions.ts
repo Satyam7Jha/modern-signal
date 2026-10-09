@@ -153,3 +153,22 @@ export async function deleteTask(id: string): Promise<RowActionResult> {
   revalidatePath("/");
   return { error: null };
 }
+
+/** Undo for a soft delete: clears deleted_at again. */
+export async function restoreTask(id: string): Promise<RowActionResult> {
+  const supabase = await requireSupabase();
+  const { data, error } = await supabase
+    .from("tasks")
+    .update({ deleted_at: null })
+    .eq("id", id)
+    .not("deleted_at", "is", null)
+    .select("id");
+
+  if (error || data.length === 0) {
+    if (error) console.error("restoreTask failed", error);
+    return { error: "Could not restore the task." };
+  }
+
+  revalidatePath("/");
+  return { error: null };
+}

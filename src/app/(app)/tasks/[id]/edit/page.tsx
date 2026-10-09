@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { PageHeader } from "@/components/page-header";
 import { createClient } from "@/lib/supabase/server";
 import { TASK_COLUMNS, type Task } from "@/lib/tasks";
 import { updateTask } from "../../actions";
@@ -27,8 +28,8 @@ export default async function EditTaskPage({ params }: PageProps<"/tasks/[id]/ed
   if (!data) notFound();
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-xl font-semibold">Edit task</h1>
+    <div className="mx-auto max-w-2xl space-y-6">
+      <PageHeader title="Edit task" description="Update the details, or change its status." />
       <TaskForm action={updateTask.bind(null, data.id)} task={data} submitLabel="Save changes" />
     </div>
   );

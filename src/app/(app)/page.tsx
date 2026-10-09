@@ -1,4 +1,7 @@
+import { FileUpIcon, ListTodoIcon, PlusIcon, SearchXIcon, UploadIcon } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { createClient } from "@/lib/supabase/server";
 import {
   TASK_COLUMNS,
@@ -8,8 +11,8 @@ import {
   parseFilters,
   type Task,
 } from "@/lib/tasks";
-import { TaskFilters } from "./task-filters";
-import { TaskList } from "./task-list";
+import { TaskTable } from "./task-table";
+import { TaskToolbar } from "./task-toolbar";
 
 export default async function TasksPage({ searchParams }: PageProps<"/">) {
   const filters = parseFilters(await searchParams);
@@ -38,59 +41,74 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
   if (error) throw new Error("Could not load your tasks.");
 
   const filtered = hasActiveFilters(filters);
+  const overdue = data.filter((task) => task.status !== "done" && task.due_date < today).length;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="mr-auto text-xl font-semibold">Tasks</h1>
-        <Link href="/import" className="btn">
-          Import CSV
-        </Link>
-        <Link href="/tasks/new" className="btn-primary">
-          New task
-        </Link>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Tasks</h1>
+          <p className="text-sm text-muted-foreground">
+            {data.length === 1 ? "1 task" : `${data.length} tasks`}
+            {filtered && (data.length === 1 ? " matches your filters" : " match your filters")}
+            {overdue > 0 && <span className="text-destructive"> · {overdue} overdue</span>}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href="/import">
+              <UploadIcon /> Import CSV
+            </Link>
+          </Button>
+          <Button asChild>
+            <Link href="/tasks/new">
+              <PlusIcon /> New task
+            </Link>
+          </Button>
+        </div>
       </div>
 
-      <TaskFilters filters={filters} />
+      <TaskToolbar filters={filters} />
 
-      {data.length === 0 ? (
-        <EmptyState filtered={filtered} />
+      {data.length > 0 ? (
+        <TaskTable tasks={data} today={today} />
+      ) : filtered ? (
+        <Empty className="border bg-background">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <SearchXIcon />
+            </EmptyMedia>
+            <EmptyTitle>No matching tasks</EmptyTitle>
+            <EmptyDescription>Try a different search or clear the filters.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent>
+            <Button variant="outline" asChild>
+              <Link href="/">Clear filters</Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
       ) : (
-        <>
-          <p className="text-sm text-slate-500">
-            {data.length === 1 ? "1 task" : `${data.length} tasks`}
-            {filtered && (data.length === 1 ? " matches these filters" : " match these filters")}
-          </p>
-          <TaskList tasks={data} today={today} />
-        </>
-      )}
-    </div>
-  );
-}
-
-function EmptyState({ filtered }: { filtered: boolean }) {
-  return (
-    <div className="card px-6 py-12 text-center">
-      {filtered ? (
-        <>
-          <p className="font-medium">No tasks match these filters.</p>
-          <Link href="/" className="mt-2 inline-block text-sm text-indigo-600 hover:underline">
-            Clear filters
-          </Link>
-        </>
-      ) : (
-        <>
-          <p className="font-medium">No tasks yet.</p>
-          <p className="mt-1 text-sm text-slate-500">Create your first task or import a CSV file.</p>
-          <div className="mt-4 flex justify-center gap-2">
-            <Link href="/tasks/new" className="btn-primary">
-              New task
-            </Link>
-            <Link href="/import" className="btn">
-              Import CSV
-            </Link>
-          </div>
-        </>
+        <Empty className="border bg-background">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <ListTodoIcon />
+            </EmptyMedia>
+            <EmptyTitle>No tasks yet</EmptyTitle>
+            <EmptyDescription>Create your first task, or import a batch from a CSV file.</EmptyDescription>
+          </EmptyHeader>
+          <EmptyContent className="flex-row justify-center gap-2">
+            <Button asChild>
+              <Link href="/tasks/new">
+                <PlusIcon /> New task
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/import">
+                <FileUpIcon /> Import CSV
+              </Link>
+            </Button>
+          </EmptyContent>
+        </Empty>
       )}
     </div>
   );

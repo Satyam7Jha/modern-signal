@@ -1,10 +1,24 @@
 "use client";
 
+import { format, parseISO } from "date-fns";
+import { AlertCircleIcon, CalendarIcon } from "lucide-react";
 import Link from "next/link";
-import { useActionState } from "react";
-import { STATUSES, STATUS_LABELS, TITLE_MAX_LENGTH } from "@/lib/task-fields";
+import { useActionState, useState } from "react";
+import { PriorityDot, PRIORITY_LABELS, STATUS_ICONS } from "@/components/task-badges";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
+import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
+import { STATUSES, STATUS_LABELS, TITLE_MAX_LENGTH, isTaskStatus, type TaskStatus } from "@/lib/task-fields";
 import type { Task } from "@/lib/tasks";
-import type { TaskFormState, TaskFormValues } from "./actions";
+import { cn } from "@/lib/utils";
+import type { TaskFormState } from "./actions";
 
 type Props = {
   action: (state: TaskFormState, formData: FormData) => Promise<TaskFormState>;
@@ -12,92 +26,153 @@ type Props = {
   submitLabel: string;
 };
 
-const PRIORITY_OPTIONS = [
-  { value: "1", label: "1 (highest)" },
-  { value: "2", label: "2" },
-  { value: "3", label: "3" },
-  { value: "4", label: "4" },
-  { value: "5", label: "5 (lowest)" },
-];
-
 export function TaskForm({ action, task, submitLabel }: Props) {
   const [state, formAction, pending] = useActionState(action, { errors: {}, values: null });
-
-  // After a failed submit, show what the user typed; otherwise the saved task.
-  const values: TaskFormValues = state.values ?? {
-    title: task?.title ?? "",
-    due_date: task?.due_date ?? "",
-    priority: String(task?.priority ?? 3),
-    status: task?.status ?? "todo",
-    notes: task?.notes ?? "",
-  };
   const { errors } = state;
 
+  // The date picker and selects are not native inputs, so their values live in
+  // state and are submitted through hidden inputs below.
+  const [dueDate, setDueDate] = useState(task?.due_date ?? "");
+  const [priority, setPriority] = useState(String(task?.priority ?? 3));
+  const [status, setStatus] = useState<TaskStatus>(task?.status ?? "todo");
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
+  // After a failed submit, the text fields show what the user typed.
+  const title = state.values?.title ?? task?.title ?? "";
+  const notes = state.values?.notes ?? task?.notes ?? "";
+
   return (
-    <form action={formAction} className="card space-y-4 p-5" noValidate>
-      {errors.form && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          {errors.form}
-        </p>
-      )}
+    <form action={formAction} noValidate>
+      <input type="hidden" name="due_date" value={dueDate} />
+      <input type="hidden" name="priority" value={priority} />
+      <input type="hidden" name="status" value={status} />
 
-      <Field label="Title" error={errors.title}>
-        <input
-          name="title"
-          defaultValue={values.title}
-          maxLength={TITLE_MAX_LENGTH}
-          required
-          autoFocus
-          className="input"
-        />
-      </Field>
+      <Card>
+        <CardContent>
+          <FieldGroup>
+            {errors.form && (
+              <Alert variant="destructive">
+                <AlertCircleIcon />
+                <AlertDescription>{errors.form}</AlertDescription>
+              </Alert>
+            )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Due date" error={errors.due_date}>
-          <input name="due_date" type="date" defaultValue={values.due_date} required className="input" />
-        </Field>
-        <Field label="Priority" error={errors.priority}>
-          <select name="priority" defaultValue={values.priority} className="input">
-            {PRIORITY_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Status" error={errors.status}>
-          <select name="status" defaultValue={values.status} className="input">
-            {STATUSES.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
-        </Field>
-      </div>
+            <Field data-invalid={Boolean(errors.title)}>
+              <FieldLabel htmlFor="title">Title</FieldLabel>
+              <Input
+                id="title"
+                name="title"
+                defaultValue={title}
+                maxLength={TITLE_MAX_LENGTH}
+                placeholder="What needs to be done?"
+                aria-invalid={Boolean(errors.title)}
+                autoFocus
+              />
+              {errors.title ? (
+                <FieldError>{errors.title}</FieldError>
+              ) : (
+                <FieldDescription>Up to {TITLE_MAX_LENGTH} characters.</FieldDescription>
+              )}
+            </Field>
 
-      <Field label="Notes (optional)" error={errors.notes}>
-        <textarea name="notes" rows={4} defaultValue={values.notes} className="input" />
-      </Field>
+            <div className="grid gap-6 sm:grid-cols-3">
+              <Field data-invalid={Boolean(errors.due_date)}>
+                <FieldLabel htmlFor="due-date">Due date</FieldLabel>
+                <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="due-date"
+                      variant="outline"
+                      aria-invalid={Boolean(errors.due_date)}
+                      className={cn("justify-start font-normal", !dueDate && "text-muted-foreground")}
+                    >
+                      <CalendarIcon />
+                      {dueDate ? format(parseISO(dueDate), "PPP") : "Pick a date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={dueDate ? parseISO(dueDate) : undefined}
+                      defaultMonth={dueDate ? parseISO(dueDate) : undefined}
+                      onSelect={(date) => {
+                        setDueDate(date ? format(date, "yyyy-MM-dd") : "");
+                        setCalendarOpen(false);
+                      }}
+                    />
+                  </PopoverContent>
+                </Popover>
+                {errors.due_date && <FieldError>{errors.due_date}</FieldError>}
+              </Field>
 
-      <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="btn-primary">
-          {pending ? "Saving…" : submitLabel}
-        </button>
-        <Link href="/" className="btn">
-          Cancel
-        </Link>
-      </div>
+              <Field data-invalid={Boolean(errors.priority)}>
+                <FieldLabel htmlFor="priority">Priority</FieldLabel>
+                <Select value={priority} onValueChange={setPriority}>
+                  <SelectTrigger id="priority" className="w-full" aria-invalid={Boolean(errors.priority)}>
+                    {/* Explicit label so the trigger isn't blank before hydration. */}
+                    <SelectValue>
+                      <PriorityDot priority={Number(priority)} /> P{priority} · {PRIORITY_LABELS[Number(priority)]}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <SelectItem key={value} value={String(value)}>
+                        <PriorityDot priority={value} /> P{value} · {PRIORITY_LABELS[value]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.priority && <FieldError>{errors.priority}</FieldError>}
+              </Field>
+
+              <Field data-invalid={Boolean(errors.status)}>
+                <FieldLabel htmlFor="status">Status</FieldLabel>
+                <Select value={status} onValueChange={(value) => isTaskStatus(value) && setStatus(value)}>
+                  <SelectTrigger id="status" className="w-full">
+                    <SelectValue>{STATUS_LABELS[status]}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STATUSES.map((value) => {
+                      const Icon = STATUS_ICONS[value];
+                      return (
+                        <SelectItem key={value} value={value}>
+                          <Icon /> {STATUS_LABELS[value]}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                {errors.status && <FieldError>{errors.status}</FieldError>}
+              </Field>
+            </div>
+
+            <Field data-invalid={Boolean(errors.notes)}>
+              <FieldLabel htmlFor="notes">
+                Notes <span className="font-normal text-muted-foreground">(optional)</span>
+              </FieldLabel>
+              <Textarea
+                id="notes"
+                name="notes"
+                rows={5}
+                defaultValue={notes}
+                placeholder="Add details, links or context…"
+                aria-invalid={Boolean(errors.notes)}
+              />
+              {errors.notes && <FieldError>{errors.notes}</FieldError>}
+            </Field>
+          </FieldGroup>
+        </CardContent>
+
+        <CardFooter className="justify-end gap-2 border-t">
+          <Button variant="outline" asChild>
+            <Link href="/">Cancel</Link>
+          </Button>
+          <Button type="submit" disabled={pending}>
+            {pending && <Spinner />}
+            {submitLabel}
+          </Button>
+        </CardFooter>
+      </Card>
     </form>
-  );
-}
-
-function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
-  return (
-    <label className="block space-y-1">
-      <span className="text-sm font-medium">{label}</span>
-      {children}
-      {error && <span className="block text-sm text-red-600">{error}</span>}
-    </label>
   );
 }
