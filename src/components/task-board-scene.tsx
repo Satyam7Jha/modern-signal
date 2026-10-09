@@ -1,22 +1,38 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import type * as THREE from "three";
 import { cn } from "@/lib/utils";
 
 // A decorative 3D "task board" for the sign-in page: a grid of rounded tiles
-// ripples like a wave, and every so often a tile is "completed" and fades to
-// the brand indigo. Three.js is loaded lazily, so it only costs anything on
-// the page that shows this component.
+// ripples like a wave, and every so often a tile is "completed" and lights up
+// in the brand indigo, with a bloom pass making it glow. Three.js is loaded
+// lazily, so it only costs anything on the page that shows this component.
 
 const COLUMNS = 22;
 const ROWS = 14;
 const GAP_X = 1.05;
 const GAP_Z = 0.8;
+const BACKGROUND = 0x09090b; // zinc-950, matches the panel behind the canvas
 const BASE_COLOR = 0x3f3f46; // zinc-700
-const DONE_COLOR = 0x818cf8; // indigo-400
+const DONE_COLOR = 0x6366f1; // indigo-500
+const DONE_INTENSITY = 2.8; // > 1 pushes "done" tiles over the bloom threshold
 const COMPLETE_EVERY_MS = 650;
 const DONE_FOR_MS = 7000;
+
+async function loadThree() {
+  const [three, { RoundedBoxGeometry }, { EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] =
+    await Promise.all([
+      import("three"),
+      import("three/addons/geometries/RoundedBoxGeometry.js"),
+      import("three/addons/postprocessing/EffectComposer.js"),
+      import("three/addons/postprocessing/RenderPass.js"),
+      import("three/addons/postprocessing/UnrealBloomPass.js"),
+      import("three/addons/postprocessing/OutputPass.js"),
+    ]);
+  return { three, RoundedBoxGeometry, EffectComposer, RenderPass, UnrealBloomPass, OutputPass };
+}
+
+type ThreeModules = Awaited<ReturnType<typeof loadThree>>;
 
 export function TaskBoardScene({ className }: { className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -28,12 +44,9 @@ export function TaskBoardScene({ className }: { className?: string }) {
     let disposed = false;
     let cleanup = () => {};
 
-    (async () => {
-      const three = await import("three");
-      const { RoundedBoxGeometry } = await import("three/addons/geometries/RoundedBoxGeometry.js");
-      if (disposed) return;
-      cleanup = buildScene(three, RoundedBoxGeometry, container);
-    })();
+    loadThree().then((modules) => {
+      if (!disposed) cleanup = buildScene(modules, container);
+    });
 
     return () => {
       disposed = true;
@@ -44,54 +57,59 @@ export function TaskBoardScene({ className }: { className?: string }) {
   return <div ref={containerRef} aria-hidden className={cn("pointer-events-none", className)} />;
 }
 
-function buildScene(
-  three: typeof THREE,
-  RoundedBoxGeometry: typeof import("three/addons/geometries/RoundedBoxGeometry.js").RoundedBoxGeometry,
-  container: HTMLDivElement,
-) {
+function buildScene(modules: ThreeModules, container: HTMLDivElement) {
+  const { three, RoundedBoxGeometry, EffectComposer, RenderPass, UnrealBloomPass, OutputPass } = modules;
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  const renderer = new three.WebGLRenderer({ antialias: true, alpha: true });
+  const renderer = new three.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-  renderer.setClearColor(0x000000, 0);
-  container.appendChild(renderer.domElement);
+  renderer.setClearColor(BACKGROUND);
+  renderer.toneMapping = three.ACESFilmicToneMapping;
   renderer.domElement.style.display = "block";
+  container.appendChild(renderer.domElement);
 
   const scene = new three.Scene();
-  scene.fog = new three.Fog(0x09090b, 12, 26); // fade distant tiles into the zinc-950 background
+  scene.fog = new three.Fog(BACKGROUND, 11, 25); // distant tiles fade into the background
 
   const camera = new three.PerspectiveCamera(38, 1, 0.1, 100);
   const cameraHome = new three.Vector3(0, 9.5, 13);
   camera.position.copy(cameraHome);
 
-  scene.add(new three.AmbientLight(0xffffff, 0.55));
-  const sun = new three.DirectionalLight(0xffffff, 1.6);
+  scene.add(new three.AmbientLight(0xffffff, 0.5));
+  const sun = new three.DirectionalLight(0xffffff, 1.5);
   sun.position.set(6, 12, 8);
   scene.add(sun);
-  const glow = new three.PointLight(DONE_COLOR, 40, 18, 1.6);
+  const glow = new three.PointLight(0x8b5cf6, 60, 16, 1.5); // violet light drifting over the board
   glow.position.set(0, 3, 2);
   scene.add(glow);
 
   // One InstancedMesh draws every tile in a single draw call.
   const geometry = new RoundedBoxGeometry(0.86, 0.14, 0.6, 3, 0.07);
-  const material = new three.MeshStandardMaterial({ roughness: 0.45, metalness: 0.15 });
+  const material = new three.MeshStandardMaterial({ roughness: 0.4, metalness: 0.2 });
   const tiles = new three.InstancedMesh(geometry, material, COLUMNS * ROWS);
   scene.add(tiles);
 
   const base = new three.Color(BASE_COLOR);
-  const done = new three.Color(DONE_COLOR);
-  const doneUntil = new Float32Array(COLUMNS * ROWS); // timestamp until which a tile stays "done"
-  const mix = new Float32Array(COLUMNS * ROWS); // 0 = base color, 1 = done color
+  const done = new three.Color(DONE_COLOR).multiplyScalar(DONE_INTENSITY);
+  const doneUntil = new Float32Array(tiles.count); // timestamp until which a tile stays "done"
+  const mix = new Float32Array(tiles.count); // 0 = base color, 1 = done color
   const color = new three.Color();
   const dummy = new three.Object3D();
 
   for (let i = 0; i < tiles.count; i++) {
-    if (Math.random() < 0.12) {
+    if (Math.random() < 0.1) {
       doneUntil[i] = Math.random() * DONE_FOR_MS;
       mix[i] = 1;
     }
     tiles.setColorAt(i, color.copy(base).lerp(done, mix[i]));
   }
+
+  // Post-processing: render, bloom the bright tiles, then tone-map to the screen.
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new three.Vector2(1, 1), 0.85, 0.5, 0.8);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
 
   const pointer = { x: 0, y: 0 };
   const onPointerMove = (event: PointerEvent) => {
@@ -104,6 +122,7 @@ function buildScene(
     const { clientWidth, clientHeight } = container;
     if (!clientWidth || !clientHeight) return;
     renderer.setSize(clientWidth, clientHeight);
+    composer.setSize(clientWidth, clientHeight);
     camera.aspect = clientWidth / clientHeight;
     camera.updateProjectionMatrix();
   };
@@ -129,7 +148,8 @@ function buildScene(
         const z = (row - (ROWS - 1) / 2) * GAP_Z;
         const wave = Math.sin(x * 0.45 + t * 0.9) * Math.cos(z * 0.55 + t * 0.6);
 
-        dummy.position.set(x, wave * 0.45, z);
+        // Completed tiles float slightly above the wave.
+        dummy.position.set(x, wave * 0.45 + mix[i] * 0.25, z);
         dummy.rotation.set(wave * 0.12, 0, wave * 0.08);
         dummy.updateMatrix();
         tiles.setMatrixAt(i, dummy.matrix);
@@ -153,7 +173,7 @@ function buildScene(
     camera.position.y += (cameraHome.y - pointer.y * 0.8 - camera.position.y) * 0.04;
     camera.lookAt(0, -0.5, 0);
 
-    renderer.render(scene, camera);
+    composer.render();
   };
 
   if (reducedMotion) {
@@ -164,8 +184,7 @@ function buildScene(
 
   // Don't burn GPU time while the tab is hidden.
   const onVisibilityChange = () => {
-    if (reducedMotion) return;
-    renderer.setAnimationLoop(document.hidden ? null : render);
+    if (!reducedMotion) renderer.setAnimationLoop(document.hidden ? null : render);
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
 
@@ -174,6 +193,8 @@ function buildScene(
     document.removeEventListener("visibilitychange", onVisibilityChange);
     window.removeEventListener("pointermove", onPointerMove);
     resizeObserver.disconnect();
+    bloom.dispose();
+    composer.dispose();
     tiles.dispose();
     geometry.dispose();
     material.dispose();
