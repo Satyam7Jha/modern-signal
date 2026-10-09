@@ -49,11 +49,11 @@ export function hasActiveFilters(filters: TaskFilters): boolean {
 }
 
 /**
- * Escapes the LIKE wildcards % and _ (and the escape character itself) so a
- * search for "50%" matches that text literally.
+ * Escapes every regex special character so a search for "b*k" or "(draft)"
+ * matches that text literally.
  */
-export function escapeLikePattern(value: string): string {
-  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+export function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /** Today's date as YYYY-MM-DD, offset by a number of days. */

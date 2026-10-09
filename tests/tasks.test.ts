@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeLikePattern, groupTasks, parseFilters, relativeDue, type Task } from "@/lib/tasks";
+import { escapeRegExp, groupTasks, parseFilters, relativeDue, type Task } from "@/lib/tasks";
 
 const TODAY = "2026-10-09";
 
@@ -27,9 +27,13 @@ describe("parseFilters", () => {
   });
 });
 
-describe("escapeLikePattern", () => {
-  it("escapes LIKE wildcards so they match literally", () => {
-    expect(escapeLikePattern("100%_done\\")).toBe("100\\%\\_done\\\\");
+describe("escapeRegExp", () => {
+  it("escapes regex special characters so they match literally", () => {
+    expect(escapeRegExp("b*k (a+b)? [x] ^$ . | \\")).toBe("b\\*k \\(a\\+b\\)\\? \\[x\\] \\^\\$ \\. \\| \\\\");
+  });
+
+  it("leaves LIKE wildcards alone, since they are not special in a regex", () => {
+    expect(escapeRegExp("100%_done")).toBe("100%_done");
   });
 });
 

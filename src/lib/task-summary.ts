@@ -1,31 +1,30 @@
 import { cache } from "react";
 import { createClient } from "./supabase/server";
-import { isoDate } from "./tasks";
-import type { ViewId } from "./views";
+import { queryTasks } from "./task-query";
+import { isoDate, parseFilters } from "./tasks";
+import { VIEWS, type ViewId } from "./views";
 
 export type TaskSummary = Record<ViewId, number> & { open: number };
 
 /**
- * Task counts for the sidebar views and the stat cards. Each count uses the
- * same rule as the matching list filter, so a view's badge equals its rows.
- * React's cache() lets the layout and the page share one query per request.
+ * Task counts for the sidebar views and the stat cards. Each count is a
+ * database count query built from the view's own URL filters, so a view's
+ * badge equals its rows and no task rows are downloaded.
+ * React's cache() lets the layout and the page share one set of queries per request.
  */
 export const getTaskSummary = cache(async (): Promise<TaskSummary> => {
   const supabase = await createClient();
-  const { data, error } = await supabase.from("tasks").select("status, due_date").is("deleted_at", null);
-  if (error) throw new Error("Could not load your tasks.");
-
   const today = isoDate();
-  const weekEnd = isoDate(7);
-  const done = data.filter((task) => task.status === "done").length;
 
-  return {
-    all: data.length,
-    open: data.length - done,
-    today: data.filter((task) => task.due_date === today).length,
-    week: data.filter((task) => task.due_date >= today && task.due_date <= weekEnd).length,
-    overdue: data.filter((task) => task.status !== "done" && task.due_date < today).length,
-    in_progress: data.filter((task) => task.status === "in_progress").length,
-    done,
-  };
+  const counts = await Promise.all(
+    VIEWS.map(async (view) => {
+      const filters = parseFilters(Object.fromEntries(new URLSearchParams(view.query)));
+      const { count, error } = await queryTasks(supabase, filters, { columns: "id", head: true, today });
+      if (error || count === null) throw new Error("Could not load your tasks.");
+      return [view.id, count] as const;
+    }),
+  );
+
+  const summary = Object.fromEntries(counts) as Record<ViewId, number>;
+  return { ...summary, open: summary.all - summary.done };
 });

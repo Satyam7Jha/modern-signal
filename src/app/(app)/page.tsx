@@ -12,41 +12,27 @@ import { StatCard } from "@/components/stat-card";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { createClient, getUser } from "@/lib/supabase/server";
+import { queryTasks } from "@/lib/task-query";
 import { getTaskSummary } from "@/lib/task-summary";
-import {
-  TASK_COLUMNS,
-  escapeLikePattern,
-  groupTasks,
-  hasActiveFilters,
-  isoDate,
-  parseFilters,
-  type Task,
-} from "@/lib/tasks";
+import { groupTasks, hasActiveFilters, isoDate, parseFilters, type Task } from "@/lib/tasks";
 import { activeView, viewHref } from "@/lib/views";
 import { TaskTable } from "./task-table";
 import { TaskToolbar } from "./task-toolbar";
+
+// The list shows at most this many tasks and says so when there are more.
+const LIST_LIMIT = 500;
 
 export default async function TasksPage({ searchParams }: PageProps<"/">) {
   const filters = parseFilters(await searchParams);
   const supabase = await createClient();
   const today = isoDate();
 
-  // RLS limits this to the signed-in user's rows; we only hide soft-deleted ones.
-  let query = supabase.from("tasks").select(TASK_COLUMNS).is("deleted_at", null);
-
-  if (filters.q) query = query.ilike("search_text", `%${escapeLikePattern(filters.q)}%`);
-  if (filters.status) query = query.eq("status", filters.status);
-  if (filters.priority) query = query.eq("priority", filters.priority);
-  if (filters.due === "overdue") query = query.lt("due_date", today).neq("status", "done");
-  if (filters.due === "today") query = query.eq("due_date", today);
-  if (filters.due === "week") query = query.gte("due_date", today).lte("due_date", isoDate(7));
-
   const [list, summary, user] = await Promise.all([
-    query
+    queryTasks(supabase, filters, { today })
       .order("due_date")
       .order("priority")
       .order("created_at")
-      .limit(500)
+      .limit(LIST_LIMIT)
       .overrideTypes<Task[], { merge: false }>(),
     getTaskSummary(), // shared with the layout via React cache()
     getUser(),
@@ -56,6 +42,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
   if (list.error) throw new Error("Could not load your tasks.");
 
   const tasks = list.data;
+  const total = list.count ?? tasks.length; // every matching task, not just the ones shown
   const view = activeView(filters);
   const filtered = hasActiveFilters(filters);
 
@@ -88,14 +75,22 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
           <h2 id="task-list-heading" className="flex shrink-0 items-center gap-2 pl-1 font-semibold tracking-tight">
             {view?.label ?? "Filtered tasks"}
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
-              {tasks.length}
+              {total.toLocaleString("en-US")}
             </span>
           </h2>
           <TaskToolbar filters={filters} />
         </div>
 
         {tasks.length > 0 ? (
-          <TaskTable groups={groupTasks(tasks, today)} today={today} />
+          <>
+            <TaskTable groups={groupTasks(tasks, today)} today={today} />
+            {total > tasks.length && (
+              <p role="status" className="border-t bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+                Showing the first {tasks.length.toLocaleString("en-US")} of {total.toLocaleString("en-US")} tasks, by due
+                date. Search or filter to find the rest.
+              </p>
+            )}
+          </>
         ) : filtered ? (
           <Empty className="flex-1 py-16">
             <EmptyHeader>
