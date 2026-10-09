@@ -71,12 +71,7 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
-      import_tasks: {
-        Args: { rows: Json };
-        Returns: {
-          imported_row: number;
-        }[];
-      };
+      import_tasks: { Args: { rows: Json }; Returns: number[] };
     };
     Enums: {
       [_ in never]: never;

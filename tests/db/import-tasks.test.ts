@@ -10,7 +10,7 @@ type Row = { row_number: number; title: string; due_date: string; priority: numb
 async function importRows(user: TestUser, rows: Row[]) {
   const { data, error } = await user.client.rpc("import_tasks", { rows });
   if (error) throw error;
-  return (data as { imported_row: number }[]).map((row) => row.imported_row);
+  return data as number[];
 }
 
 async function titles(user: TestUser) {
@@ -63,6 +63,25 @@ describe("import_tasks (database)", () => {
 
     expect(imported).toEqual([2]); // the first user's "Pay rent" is invisible to this user
     expect(await titles(other)).toEqual(["Pay rent"]);
+  });
+
+  it("reports every imported row, beyond the API's 1,000-row response cap", async () => {
+    // PostgREST returns at most max_rows (1,000) rows from a query or a
+    // set-returning function. Use more than that so a capped response fails.
+    const bulk = await createTestUser("bulk-importer");
+    const rows = Array.from({ length: 1500 }, (_, i) => ({
+      row_number: i + 2,
+      title: `Bulk task ${i + 1}`,
+      due_date: "2026-11-15",
+      priority: 3,
+    }));
+
+    const imported = await importRows(bulk, rows);
+    expect(imported).toHaveLength(1500);
+    expect(imported[1499]).toBe(1501);
+
+    const { count } = await bulk.client.from("tasks").select("id", { count: "exact", head: true });
+    expect(count).toBe(1500);
   });
 
   it("is all-or-nothing: one bad row rolls back the whole batch", async () => {

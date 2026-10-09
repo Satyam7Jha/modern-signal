@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       // The function runs in one transaction, so a failure means nothing was saved.
       return json({ error: "The import failed and no tasks were added. Please try again." }, 500);
     }
-    importedRowNumbers = data.map((row) => row.imported_row);
+    importedRowNumbers = data;
   }
 
   return json(finishImport(prepared.valid, prepared.rejected, importedRowNumbers));
