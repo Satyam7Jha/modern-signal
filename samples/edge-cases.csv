@@ -1,0 +1,9 @@
+title,due_date,priority,notes
+Buy groceries,2026-10-15,2,"Milk, eggs, and bread"
+Call the dentist,2026-10-20,3,
+buy groceries ,2026-10-15,4,Same title and date as row 2 (case and spaces differ)
+
+Prepare quarterly report,2026-10-31,high,Priority is a word instead of a number
+This title is deliberately longer than the two hundred character limit so the importer has to reject it. It keeps going with more words about nothing in particular until it is comfortably past that limit for sure,2026-11-01,1,Title is over 200 characters
+Renew passport,2026-02-30,2,February 30 is not a real date
+Plan team offsite,2026-11-15,5,"Agenda: ""kickoff"", workshops, dinner"

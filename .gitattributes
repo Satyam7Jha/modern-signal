@@ -1,0 +1,2 @@
+# Keep the sample CSV byte-for-byte (CRLF line endings are part of the test case).
+samples/*.csv -text
