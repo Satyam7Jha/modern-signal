@@ -3,25 +3,36 @@
 // result is kept in order and in full; only embedded images (base64) are
 // replaced by a placeholder, because the repo must not contain binary data.
 //
-// Usage: node render-ai-log.mjs <session.jsonl> <out.md> [redactions.json]
-// redactions.json (optional): ["exact text to replace", ...]; each match is
-// replaced with "[redacted: personal data]" and counted in the header.
+// Usage: node render-ai-log.mjs <session.jsonl> <out.md> [--remove-paste=1,2] [redactions.json]
+// --remove-paste=N[,M]: replace the Nth block of text the user pasted (Claude
+//   Code wraps pastes in <pasted_content> tags; counted from 1 in transcript
+//   order) with a note saying it was removed. Used here for a pasted recruiter
+//   email that contained personal data.
+// redactions.json (optional): a list of exact strings to replace. A plain
+//   string is replaced with "[redacted: personal data]"; an object
+//   { "text": "...", "reason": "local dev secret" } with "[redacted: <reason>]".
+//   Keep this file outside the repo: it contains the values it hides.
 
 import { readFileSync, writeFileSync } from "node:fs";
 
-const [input, output, redactionsPath] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const removePastes = new Set(
+  (args.find((arg) => arg.startsWith("--remove-paste="))?.split("=")[1] ?? "").split(",").filter(Boolean).map(Number),
+);
+const [input, output, redactionsPath] = args.filter((arg) => !arg.startsWith("--"));
 if (!input || !output) {
-  console.error("Usage: node render-ai-log.mjs <session.jsonl> <out.md> [redactions.json]");
+  console.error("Usage: node render-ai-log.mjs <session.jsonl> <out.md> [--remove-paste=1,2] [redactions.json]");
   process.exit(1);
 }
 
 const redactions = redactionsPath ? JSON.parse(readFileSync(redactionsPath, "utf8")) : [];
 let redactionCount = 0;
 const redact = (text) => {
-  for (const needle of redactions) {
+  for (const entry of redactions) {
+    const { text: needle, reason } = typeof entry === "string" ? { text: entry, reason: "personal data" } : entry;
     const parts = text.split(needle);
     redactionCount += parts.length - 1;
-    text = parts.join("[redacted: personal data]");
+    text = parts.join(`[redacted: ${reason}]`);
   }
   return text;
 };
@@ -76,7 +87,17 @@ function splitContext(text) {
   return { context, user: rest };
 }
 
+const PASTED_TEXT = /<pasted_content id="([^"]+)">[\s\S]*?<\/pasted_content id="\1">/g;
+let pasteNumber = 0;
+let removedPastes = 0;
+
 function pushUserText(text, timestamp, label) {
+  text = text.replace(PASTED_TEXT, (paste) => {
+    pasteNumber++;
+    if (!removePastes.has(pasteNumber)) return paste;
+    removedPastes++;
+    return `[Pasted text #${pasteNumber} removed from this log: it contained personal data (salary, phone numbers, contact details).]`;
+  });
   const { context, user } = splitContext(text);
   for (const item of context) {
     out.push(`<details><summary>⚙️ Context added by Claude Code</summary>\n\n${fence(item)}\n\n</details>\n`);
@@ -140,11 +161,13 @@ const header = [
   `- Tool: Claude Code (VS Code extension), model Claude Opus`,
   `- Session: ${first ?? "?"} → ${last ?? "?"}`,
   `- ${userMessages} user messages, ${toolCalls} tool calls`,
-  `- Rendered from the raw JSONL transcript; embedded images are replaced by placeholders${redactionCount ? `, and ${redactionCount} occurrences of personal data are marked [redacted: personal data]` : ""}. Nothing else is changed or removed.`,
+  `- Rendered from the raw JSONL transcript; embedded images are replaced by placeholders${removedPastes ? `; ${removedPastes} pasted text block(s) containing personal data were removed and marked in place` : ""}${redactionCount ? `; ${redactionCount} occurrences of personal data or local dev secrets are marked [redacted: …]` : ""}. Nothing else is changed or removed.`,
   ``,
   `---`,
   ``,
 ].join("\n");
 
 writeFileSync(output, header + body);
-console.log(`wrote ${output}: ${userMessages} user messages, ${toolCalls} tool calls, ${redactionCount} redactions`);
+console.log(
+  `wrote ${output}: ${userMessages} user messages, ${toolCalls} tool calls, ${removedPastes} pasted blocks removed, ${redactionCount} redactions`,
+);
