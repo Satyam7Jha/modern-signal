@@ -4,14 +4,14 @@ A task-list web app with CSV import. Each user signs in and sees only their own 
 
 **Demo video (3–5 min):** _link to be added_
 
-**Stack:** TypeScript · Next.js 16 (App Router, Server Actions, Route Handler) · Supabase (Postgres 17 + Auth, run locally in Docker) · Tailwind CSS v4 · shadcn/ui (Radix) · three.js · papaparse · Vitest
+**Stack:** TypeScript · Next.js 16 (App Router, Server Actions, Route Handler) · Supabase (Postgres 17 + Auth, run locally in Docker) · Tailwind CSS v4 · shadcn/ui (Radix) · three.js · papaparse · Vitest · Playwright · GitHub Actions
 
 ## Features
 
 - **Sign-in** with email and password (Supabase Auth). Every page except `/login` requires a session.
 - **Tasks** with title, notes, due date, priority (1–5) and status (to do, in progress, done). You can create, edit, complete, reopen and **soft-delete** them; a delete can be undone from the toast.
 - **Dashboard:** a greeting, stat tiles (open, due today, overdue, completed) and the list grouped into _Overdue · Today · Tomorrow · Next 7 days · Later · Completed_, with human due labels ("Tomorrow", "3 days ago"). Only the table scrolls; its header stays pinned.
-- **Search and filters:** search covers title and notes; filters cover status, priority and due date (overdue, today, next 7 days). Saved views in the sidebar show live counts. Everything lives in the URL, so a filtered view survives a reload and can be shared.
+- **Search and filters:** search covers title and notes and matches what you type literally (`*`, `%` and `_` are not wildcards); filters cover status, priority and due date (overdue, today, next 7 days). Saved views in the sidebar show live counts. Everything lives in the URL, so a filtered view survives a reload and can be shared. The list shows the first 500 matching tasks and says so when there are more.
 - **CSV import:**
   - every row is validated on the server;
   - duplicates are caught within the file and against the account;
@@ -29,18 +29,23 @@ Prerequisites: **Node.js 20+** (developed on Node 24) and **Docker** (running). 
 npm install
 npm run db:start              # starts Supabase in Docker and applies supabase/migrations
 cp .env.example .env.local    # local Supabase URL + publishable key (fixed CLI defaults, not secrets)
+npm run db:seed               # optional: a demo account with 12 tasks
 npm run dev                   # http://localhost:3000
 ```
 
-Open http://localhost:3000, choose **Create account**, and sign up with any email and a password of 6+ characters. Email confirmation is off for local development.
+Open http://localhost:3000 and sign in as **demo@example.com** / **demo-password** (after `db:seed`), or choose **Create account** and sign up with any email and a password of 6+ characters. Email confirmation is off for local development.
 
 The first `npm run db:start` downloads the Supabase Docker images, which takes a few minutes; later starts take seconds. If your publishable key differs from the one in `.env.example`, copy it from `npm run db:status`.
 
 | Command | What it does |
 | --- | --- |
 | `npm test` | Unit tests and database tests (see below) |
+| `npm run test:unit` | Unit tests only; no Docker needed |
+| `npm run test:db` | Database tests; needs `npm run db:start` |
+| `npm run test:e2e` | Playwright end-to-end test; needs `npm run db:start` (reuses or starts `npm run dev`) |
 | `npm run db:status` | Local URLs and keys (Studio: http://127.0.0.1:54323) |
 | `npm run db:reset` | Recreate the local database from the migrations (deletes all data) |
+| `npm run db:seed` | Create the demo account and its tasks (does nothing if it already has tasks) |
 | `npm run db:types` | Regenerate `src/lib/database.types.ts` from the schema |
 | `npm run db:stop` | Stop the Supabase containers |
 | `npm run lint` / `npm run build` | ESLint / production build |
@@ -48,19 +53,26 @@ The first `npm run db:start` downloads the Supabase Docker images, which takes a
 ## Running the tests
 
 ```bash
-npm run db:start   # the RLS and import tests talk to the local database
-npm test           # 78 tests
+npm run test:unit  # 68 unit tests, no Docker needed
+npm run db:start   # the database and end-to-end tests talk to the local stack
+npm test           # 92 tests: unit + database
+npm run test:e2e   # 1 Playwright test in Chromium
 ```
 
 | File | What it covers |
 | --- | --- |
-| `tests/task-fields.test.ts` | Field rules: title length (counted the way Postgres counts characters), real `YYYY-MM-DD` dates, priority 1–5 |
+| `tests/task-fields.test.ts` | Field rules: title and notes length (counted the way Postgres counts characters), real `YYYY-MM-DD` dates, priority 1–5 |
 | `tests/csv-import.test.ts` | CSV parsing (quoted commas, escaped quotes, CRLF, blank rows, BOM, multi-line values, unclosed quotes, unquoted commas), every validation message, duplicates within the file, account duplicates, the rejected-rows CSV, and the whole `samples/edge-cases.csv` |
-| `tests/import-tasks.test.ts` | The `import_tasks` SQL function: skips rows already in the account (case-insensitive), ignores soft-deleted tasks, scopes duplicates to the caller's account, and rolls the whole batch back on failure |
-| `tests/rls.test.ts` | Another user cannot read, edit, complete, soft-delete or take over a task, and cannot create one in someone else's name. Nobody can hard-delete. Signed-out visitors see nothing. |
-| `tests/tasks.test.ts` | List helpers: filter parsing, LIKE escaping, relative due labels, grouping into sections |
+| `tests/tasks.test.ts` | List helpers: filter parsing, regex escaping for search, relative due labels, grouping into sections |
+| `tests/db/import-tasks.test.ts` | The `import_tasks` SQL function: skips rows already in the account (case-insensitive), ignores soft-deleted tasks, scopes duplicates to the caller's account, reports all 1,500 rows of a 1,500-row import, and rolls the whole batch back on failure. The notes-length constraint holds even when the app's validation is bypassed. |
+| `tests/db/import-route.test.ts` | `POST /api/import` end to end against the database: signed-out upload (401), the edge-case sample and its re-upload, a 1,500-row file then a 2,000-row re-upload (500 new, 1,500 duplicates), and a file over 1 MB |
+| `tests/db/task-query.test.ts` | Search matches `*`, `%`, `_` and brackets literally, ignores case and covers notes; sidebar counts are right above 1,000 tasks; the list gets the full count while returning 500 rows |
+| `tests/db/rls.test.ts` | Another user cannot read, edit, complete, soft-delete or take over a task, and cannot create one in someone else's name. Nobody can hard-delete. Signed-out visitors see nothing. |
+| `e2e/import.spec.ts` | In a real browser: sign up, upload `samples/edge-cases.csv`, check the counts and each rejected row's number and reason, see the imported tasks in the list, re-upload and see 3 account duplicates |
 
-The database tests sign up fresh users through Supabase Auth with only the publishable key, so they go through exactly the same RLS checks as the app. To check that the RLS tests aren't vacuous, I disabled RLS on the table and re-ran them. The four ownership tests failed, as they should. The other four still passed because column grants protect those cases independently.
+The database tests sign up fresh users through Supabase Auth with only the publishable key, so they go through exactly the same RLS checks as the app. To check that the RLS tests aren't vacuous, I disabled RLS on the table and re-ran them. The four ownership tests failed, as they should. The other four still passed because column grants protect those cases independently. Likewise, the 1,000-row tests were run against the old code first: the import tests reported 1,000 of 1,500 rows and the count test reported 1,000 of 1,204 tasks.
+
+**CI:** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the typecheck, lint, unit tests, database tests, production build and the Playwright test on every push. It starts the same local Supabase stack with the CLI.
 
 ## Trying the CSV import
 
@@ -101,7 +113,7 @@ Upload the same file again: the three valid rows are now rejected as duplicates 
 3. **Insert in one transaction:** the valid rows go to the `import_tasks` SQL function.
    - It runs as the calling user (`security invoker`), so RLS applies.
    - It takes a per-user advisory lock, so two simultaneous uploads can't both pass the duplicate check.
-   - It skips rows that match an active task, inserts the rest in one statement, and returns the row numbers it inserted.
+   - It skips rows that match an active task, inserts the rest in one statement, and returns the row numbers it inserted as a single `integer[]` value. (It first returned one row per task, but the Supabase API caps any list it returns at 1,000 rows, so large imports were misreported. A single value is never capped.)
 4. **Report:** rows that were sent but not inserted are marked as duplicates in the account. The page lists every rejected row and can download them as CSV. Values that Excel would run as formulas are escaped in that file.
 
 ### Decisions on rules the brief leaves open
@@ -117,6 +129,8 @@ Upload the same file again: the three valid rows are now rejected as duplicates 
 | Priority order | 1 is the most urgent. Lists sort by due date, then priority. |
 | Unquoted comma (more values than columns) | The row is rejected with a hint to quote the value, rather than having its values silently shifted. |
 | Unclosed quote | The row where it starts is rejected; rows before it still import. |
+| Notes length | At most 5,000 characters in the form and the CSV import, and a `CHECK` constraint in the table enforces the same limit. |
+| Long lists | The list shows the first 500 matching tasks (by due date, then priority) with the full count and a note. Counts are database count queries, so they are exact at any size. |
 
 ### Project structure
 
@@ -127,6 +141,7 @@ src/
     task-fields.ts                 field rules shared by the form and the CSV import
     csv-import.ts                  CSV parsing, validation, duplicates, rejected-rows CSV (pure)
     tasks.ts                       task type, filters, relative dates, grouping (pure)
+    task-query.ts                  the filtered tasks query behind the list and every count
     task-summary.ts                counts for the sidebar and stat tiles (React cache)
     views.ts                       saved views = sets of URL filters
     supabase/server.ts             Supabase client bound to the user's session cookie
@@ -142,9 +157,13 @@ src/
       tasks/new, tasks/[id]/edit   task form with live preview
       import/                      CSV import page
     api/import/route.ts            POST /api/import
-supabase/migrations/               tasks table, RLS policies, import_tasks function
+supabase/migrations/               tasks table, RLS policies, import_tasks function, notes limit
 samples/edge-cases.csv             the edge-case demo file
-tests/                             Vitest unit + database tests
+scripts/seed.mjs                   demo account and tasks (npm run db:seed)
+scripts/render-ai-log.mjs          renders the AI session transcripts in ai-log/
+tests/                             Vitest unit tests; tests/db/ needs the local database
+e2e/                               Playwright end-to-end test
+.github/workflows/ci.yml           CI
 ai-log/                            AI session transcripts
 ```
 
@@ -156,11 +175,11 @@ ai-log/                            AI session transcripts
 
 ## What I would do next
 
-- **CI:** a GitHub Actions workflow that runs `supabase start`, `npm test`, lint and build on every push. Add Playwright end-to-end tests for sign-up, CRUD and uploading `samples/edge-cases.csv`.
+- **More end-to-end tests:** task CRUD, filters and two users side by side, alongside the existing import test.
 - **Time zones:** "today" is currently the server's date. Store each user's time zone so "Due today" and "Overdue" follow their clock.
 - **Import UX:** a dry-run preview before committing, a choice between skipping duplicates and updating them, and background processing for large files.
 - **Trash:** a view of soft-deleted tasks with restore, plus a scheduled job that purges old ones.
-- **Scale:** pagination or list virtualisation instead of the 500-row limit, and trigram indexes if search gets slow.
+- **Scale:** pagination or list virtualisation beyond the first 500 tasks, and a trigram index if search gets slow (it also speeds up regex matches).
 - **Production:** a hosted Supabase project and Vercel deploy, email confirmation and password reset, and rate limiting on `/api/import`.
 - **Accessibility:** an axe audit and full keyboard navigation inside the table.
 
@@ -185,3 +204,8 @@ I built this with Claude Code (Claude Opus) in VS Code. The full, unedited trans
    - Layout bugs were found by measuring in the browser: the sidebar's `h-full` couldn't resolve inside a flex item, and an `mx-auto` flex child squeezed the form.
    - `supabase init` named the project after the folder, which contained a company name. It was renamed.
    - An unfamiliar `cn` npm package appeared. Its publisher and install scripts were checked before keeping it, and the `npm audit` findings were traced to their source.
+6. **An independent review before submitting.** I ran a separate Claude Code session as a strict reviewer of the finished repo, then a third session to fix what it found. Both are in [`ai-log/`](ai-log/). Each bug was reproduced before it was fixed, and the import, count and notes tests were run against the old code to show they fail:
+   - **Imports over 1,000 rows were misreported.** All rows were inserted, but the Supabase API caps any list it returns at 1,000 rows. `import_tasks` returned a list, so a 4,000-row import reported 1,000 imported and 3,000 "duplicates". The same cap made the sidebar show 1,000 for 4,014 tasks, because the counts fetched every row. My own tests never went past 1,000 rows.
+   - CSV notes had no length limit (the form had one), and search treated `*` as a wildcard.
+   - The project folder and repository were named after the company, so its name appeared hundreds of times in the AI log as file paths. Part of an email address had also slipped past the log's redactions. Both are now redacted, and the redactions are marked.
+   - There was no route test, no end-to-end test and no CI.
