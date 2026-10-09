@@ -15,7 +15,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { STATUSES, STATUS_LABELS, TITLE_MAX_LENGTH, characterLength, isTaskStatus, type TaskStatus } from "@/lib/task-fields";
+import {
+  NOTES_MAX_LENGTH,
+  STATUSES,
+  STATUS_LABELS,
+  TITLE_MAX_LENGTH,
+  characterLength,
+  isTaskStatus,
+  type TaskStatus,
+} from "@/lib/task-fields";
 import { isoDate, relativeDue, type Task } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 import type { TaskFormState } from "./actions";
@@ -198,6 +206,7 @@ export function TaskForm({ action, task, submitLabel }: Props) {
                 name="notes"
                 rows={4}
                 defaultValue={notes}
+                maxLength={NOTES_MAX_LENGTH}
                 placeholder="Add details, links or context…"
                 aria-invalid={Boolean(errors.notes)}
               />

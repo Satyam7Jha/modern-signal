@@ -1,5 +1,5 @@
 import Papa from "papaparse";
-import { isValidIsoDate, parsePriority, titleError } from "./task-fields";
+import { isValidIsoDate, notesError, parsePriority, titleError } from "./task-fields";
 
 // Pure CSV import logic: no database or framework code, so every rule here
 // is covered by unit tests. The route handler in app/api/import wires it to
@@ -173,6 +173,9 @@ export function validateValues(
   } else if (priority === null) {
     errors.push(`Priority "${values.priority}" is not a whole number from 1 to 5`);
   }
+
+  const notesProblem = notesError(values.notes);
+  if (notesProblem) errors.push(notesProblem);
 
   if (errors.length > 0 || priority === null) return { ok: false, errors };
 

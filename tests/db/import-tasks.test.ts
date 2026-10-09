@@ -84,6 +84,13 @@ describe("import_tasks (database)", () => {
     expect(count).toBe(1500);
   });
 
+  it("refuses notes over 5,000 characters even when the app's validation is bypassed", async () => {
+    const { error } = await user.client
+      .from("tasks")
+      .insert({ title: "Huge notes", due_date: "2026-11-30", priority: 3, notes: "n".repeat(5001) });
+    expect(error?.message).toMatch(/tasks_notes_length_check/);
+  });
+
   it("is all-or-nothing: one bad row rolls back the whole batch", async () => {
     const before = await titles(user);
     // Bypass the app's validation to prove the database transaction is atomic.

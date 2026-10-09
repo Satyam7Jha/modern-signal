@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidIsoDate, parsePriority, titleError } from "@/lib/task-fields";
+import { isValidIsoDate, notesError, parsePriority, titleError } from "@/lib/task-fields";
 
 describe("titleError", () => {
   it("requires a title", () => {
@@ -14,6 +14,18 @@ describe("titleError", () => {
   it("counts an emoji as one character, like Postgres does", () => {
     // 200 emoji are 400 UTF-16 code units but 200 characters.
     expect(titleError("🙂".repeat(200))).toBeNull();
+  });
+});
+
+describe("notesError", () => {
+  it("accepts empty notes and up to 5,000 characters", () => {
+    expect(notesError("")).toBeNull();
+    expect(notesError("a".repeat(5000))).toBeNull();
+    expect(notesError("🙂".repeat(5000))).toBeNull();
+  });
+
+  it("rejects notes over 5,000 characters", () => {
+    expect(notesError("a".repeat(5001))).toBe("Notes must be 5,000 characters or fewer (they have 5,001)");
   });
 });
 

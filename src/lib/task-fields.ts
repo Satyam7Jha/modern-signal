@@ -1,8 +1,9 @@
 // Field rules shared by the task form and the CSV import, so both paths
 // accept and reject exactly the same values. The database repeats the
-// title-length, priority and status rules as CHECK constraints.
+// title-length, notes-length, priority and status rules as CHECK constraints.
 
 export const TITLE_MAX_LENGTH = 200;
+export const NOTES_MAX_LENGTH = 5000;
 
 export const STATUSES = ["todo", "in_progress", "done"] as const;
 export type TaskStatus = (typeof STATUSES)[number];
@@ -31,6 +32,15 @@ export function titleError(title: string): string | null {
   const length = characterLength(title);
   if (length > TITLE_MAX_LENGTH) {
     return `Title must be ${TITLE_MAX_LENGTH} characters or fewer (it has ${length})`;
+  }
+  return null;
+}
+
+/** Returns an error message, or null if the (already trimmed) notes are short enough. */
+export function notesError(notes: string): string | null {
+  const length = characterLength(notes);
+  if (length > NOTES_MAX_LENGTH) {
+    return `Notes must be ${NOTES_MAX_LENGTH.toLocaleString("en-US")} characters or fewer (they have ${length.toLocaleString("en-US")})`;
   }
   return null;
 }

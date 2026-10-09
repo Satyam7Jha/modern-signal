@@ -108,6 +108,7 @@ describe("prepareImport: validation", () => {
         "Decimal priority,2026-10-10,2.5,",
         "Out of range,2026-10-10,6,",
         "No priority,2026-10-10,,",
+        `Long notes,2026-10-10,1,${"n".repeat(5001)}`,
       ].join("\n"),
     );
 
@@ -121,6 +122,7 @@ describe("prepareImport: validation", () => {
     expect(reasonFor(result, 8)).toBe('Priority "2.5" is not a whole number from 1 to 5');
     expect(reasonFor(result, 9)).toBe('Priority "6" is not a whole number from 1 to 5');
     expect(reasonFor(result, 10)).toBe("Priority is required (a whole number from 1 to 5)");
+    expect(reasonFor(result, 11)).toBe("Notes must be 5,000 characters or fewer (they have 5,001)");
   });
 
   it("lists every problem in a row, not just the first", () => {

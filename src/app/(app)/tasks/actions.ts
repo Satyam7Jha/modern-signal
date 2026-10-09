@@ -6,12 +6,11 @@ import { createClient } from "@/lib/supabase/server";
 import {
   isTaskStatus,
   isValidIsoDate,
+  notesError,
   parsePriority,
   titleError,
   type TaskStatus,
 } from "@/lib/task-fields";
-
-const NOTES_MAX_LENGTH = 5000;
 
 type TaskFields = "title" | "due_date" | "priority" | "status" | "notes";
 export type TaskFormValues = Record<TaskFields, string>;
@@ -37,9 +36,8 @@ function readTaskForm(formData: FormData) {
   const priority = parsePriority(values.priority);
   if (priority === null) errors.priority = "Priority must be a whole number from 1 to 5";
   if (!isTaskStatus(values.status)) errors.status = "Choose a status";
-  if (values.notes.length > NOTES_MAX_LENGTH) {
-    errors.notes = `Notes must be ${NOTES_MAX_LENGTH} characters or fewer`;
-  }
+  const notesProblem = notesError(values.notes);
+  if (notesProblem) errors.notes = notesProblem;
 
   if (Object.keys(errors).length > 0 || priority === null) {
     return { ok: false as const, state: { errors, values } };
