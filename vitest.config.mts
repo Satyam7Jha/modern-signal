@@ -7,9 +7,12 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["tests/**/*.test.ts"],
     setupFiles: ["tests/setup-env.ts"],
-    // The RLS tests talk to the local Supabase stack over HTTP.
-    testTimeout: 20_000,
+    projects: [
+      // Pure functions: no database, no Docker (`npm run test:unit`).
+      { extends: true, test: { name: "unit", include: ["tests/*.test.ts"] } },
+      // Talk to the local Supabase stack over HTTP (`npm run test:db`).
+      { extends: true, test: { name: "db", include: ["tests/db/**/*.test.ts"], testTimeout: 30_000 } },
+    ],
   },
 });

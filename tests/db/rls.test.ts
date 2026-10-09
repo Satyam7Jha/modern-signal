@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { anonClient, assertSupabaseIsRunning, createTestUser, type TestUser } from "./helpers/supabase";
+import { anonClient, assertSupabaseIsRunning, createTestUser, type TestUser } from "./helpers";
 
 // Runs against the local Supabase stack. Alice and Bob are real users signed
 // in through Supabase Auth; every query below is filtered by the RLS policies

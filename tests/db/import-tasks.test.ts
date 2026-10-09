@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { assertSupabaseIsRunning, createTestUser, type TestUser } from "./helpers/supabase";
+import { assertSupabaseIsRunning, createTestUser, type TestUser } from "./helpers";
 
 // The import_tasks SQL function checks duplicates against tasks already in the
 // account and inserts the rest in one transaction. These tests run it on the
