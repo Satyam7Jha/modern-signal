@@ -32,6 +32,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
       .order("due_date")
       .order("priority")
       .order("created_at")
+      .order("title") // rows from one import share created_at; keeps the order (and the first 500) stable
       .limit(LIST_LIMIT)
       .overrideTypes<Task[], { merge: false }>(),
     getTaskSummary(), // shared with the layout via React cache()
@@ -75,7 +76,7 @@ export default async function TasksPage({ searchParams }: PageProps<"/">) {
           <h2 id="task-list-heading" className="flex shrink-0 items-center gap-2 pl-1 font-semibold tracking-tight">
             {view?.label ?? "Filtered tasks"}
             <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
-              {total.toLocaleString("en-US")}
+              {total}
             </span>
           </h2>
           <TaskToolbar filters={filters} />
