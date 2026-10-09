@@ -19,6 +19,7 @@ import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
+  Command,
   CommandDialog,
   CommandEmpty,
   CommandGroup,
@@ -106,57 +107,60 @@ export function CommandMenu() {
       title="Command menu"
       description="Search tasks, jump to a view or run an action"
     >
-      <CommandInput placeholder="Search tasks or type a command…" value={query} onValueChange={setQuery} />
-      <CommandList>
-        <CommandEmpty>No matching commands.</CommandEmpty>
+      {/* This version of CommandDialog doesn't add the cmdk root itself. */}
+      <Command>
+        <CommandInput placeholder="Search tasks or type a command…" value={query} onValueChange={setQuery} />
+        <CommandList>
+          <CommandEmpty>No matching commands.</CommandEmpty>
 
-        {search && (
-          <CommandGroup heading="Search">
-            {/* The value includes the query, so cmdk always keeps this item visible. */}
-            <CommandItem
-              value={`search tasks ${search}`}
-              onSelect={() => run(() => router.push(`/?q=${encodeURIComponent(search)}`))}
-            >
-              <SearchIcon /> Search tasks for “{search}”
+          {search && (
+            <CommandGroup heading="Search">
+              {/* The value includes the query, so cmdk always keeps this item visible. */}
+              <CommandItem
+                value={`search tasks ${search}`}
+                onSelect={() => run(() => router.push(`/?q=${encodeURIComponent(search)}`))}
+              >
+                <SearchIcon /> Search tasks for “{search}”
+              </CommandItem>
+            </CommandGroup>
+          )}
+
+          <CommandGroup heading="Actions">
+            <CommandItem onSelect={() => run(() => router.push("/tasks/new"))}>
+              <PlusIcon /> New task
+              <CommandShortcut>N</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => run(() => router.push("/import"))}>
+              <UploadIcon /> Import tasks from CSV
             </CommandItem>
           </CommandGroup>
-        )}
 
-        <CommandGroup heading="Actions">
-          <CommandItem onSelect={() => run(() => router.push("/tasks/new"))}>
-            <PlusIcon /> New task
-            <CommandShortcut>N</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => run(() => router.push("/import"))}>
-            <UploadIcon /> Import tasks from CSV
-          </CommandItem>
-        </CommandGroup>
+          <CommandSeparator />
+          <CommandGroup heading="Views">
+            {VIEWS.map((view) => {
+              const Icon = VIEW_ICONS[view.id];
+              return (
+                <CommandItem key={view.id} onSelect={() => run(() => router.push(viewHref(view.query)))}>
+                  <Icon /> {view.label}
+                </CommandItem>
+              );
+            })}
+          </CommandGroup>
 
-        <CommandSeparator />
-        <CommandGroup heading="Views">
-          {VIEWS.map((view) => {
-            const Icon = VIEW_ICONS[view.id];
-            return (
-              <CommandItem key={view.id} onSelect={() => run(() => router.push(viewHref(view.query)))}>
-                <Icon /> {view.label}
-              </CommandItem>
-            );
-          })}
-        </CommandGroup>
-
-        <CommandSeparator />
-        <CommandGroup heading="Theme">
-          <CommandItem onSelect={() => run(() => setTheme("light"))}>
-            <SunIcon /> Light theme
-          </CommandItem>
-          <CommandItem onSelect={() => run(() => setTheme("dark"))}>
-            <MoonIcon /> Dark theme
-          </CommandItem>
-          <CommandItem onSelect={() => run(() => setTheme("system"))}>
-            <MonitorIcon /> System theme
-          </CommandItem>
-        </CommandGroup>
-      </CommandList>
+          <CommandSeparator />
+          <CommandGroup heading="Theme">
+            <CommandItem onSelect={() => run(() => setTheme("light"))}>
+              <SunIcon /> Light theme
+            </CommandItem>
+            <CommandItem onSelect={() => run(() => setTheme("dark"))}>
+              <MoonIcon /> Dark theme
+            </CommandItem>
+            <CommandItem onSelect={() => run(() => setTheme("system"))}>
+              <MonitorIcon /> System theme
+            </CommandItem>
+          </CommandGroup>
+        </CommandList>
+      </Command>
     </CommandDialog>
   );
 }
