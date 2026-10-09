@@ -1,8 +1,10 @@
+
+
 # Task List App
 
 A task-list web app with CSV import. Each user signs in and sees only their own tasks, enforced in Postgres with row-level security (RLS).
 
-**Demo video (3–5 min):** _link to be added_
+**Demo video (3–5 min):** https://drive.google.com/file/d/1Ubl6Z5UBpZLMyyGNIyfBT3vuOwqXF5gF/view?usp=sharing
 
 **Stack:** TypeScript · Next.js 16 (App Router, Server Actions, Route Handler) · Supabase (Postgres 17 + Auth, run locally in Docker) · Tailwind CSS v4 · shadcn/ui (Radix) · three.js · papaparse · Vitest · Playwright · GitHub Actions
 
