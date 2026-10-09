@@ -28,7 +28,7 @@ export default async function EditTaskPage({ params }: PageProps<"/tasks/[id]/ed
   if (!data) notFound();
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div className="mx-auto w-full max-w-5xl space-y-6">
       <PageHeader title="Edit task" description="Update the details, or change its status." />
       <TaskForm action={updateTask.bind(null, data.id)} task={data} submitLabel="Save changes" />
     </div>
