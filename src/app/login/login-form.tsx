@@ -1,10 +1,9 @@
 "use client";
 
-import { AlertCircleIcon } from "lucide-react";
-import { useActionState } from "react";
+import { AlertCircleIcon, ArrowRightIcon } from "lucide-react";
+import { useActionState, useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -13,54 +12,52 @@ import { signIn, signUp, type AuthState } from "./actions";
 
 const initialState: AuthState = { error: null, email: "" };
 
+const COPY = {
+  "sign-in": { title: "Welcome back", description: "Sign in to pick up where you left off." },
+  "sign-up": { title: "Create your account", description: "Start organising your tasks in seconds." },
+} as const;
+
+type Mode = keyof typeof COPY;
+
 export function LoginForm() {
+  const [mode, setMode] = useState<Mode>("sign-in");
   const [signInState, signInAction, signingIn] = useActionState(signIn, initialState);
   const [signUpState, signUpAction, signingUp] = useActionState(signUp, initialState);
 
   return (
-    <Tabs defaultValue="sign-in" className="w-full max-w-sm">
-      <TabsList className="w-full">
-        <TabsTrigger value="sign-in">Sign in</TabsTrigger>
-        <TabsTrigger value="sign-up">Create account</TabsTrigger>
-      </TabsList>
+    <div className="w-full max-w-sm space-y-6">
+      <div className="space-y-1.5">
+        <h2 className="text-2xl font-semibold tracking-tight">{COPY[mode].title}</h2>
+        <p className="text-sm text-muted-foreground">{COPY[mode].description}</p>
+      </div>
 
-      <TabsContent value="sign-in">
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome back</CardTitle>
-            <CardDescription>Sign in to see your tasks.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AuthForm
-              action={signInAction}
-              state={signInState}
-              pending={signingIn}
-              submitLabel="Sign in"
-              passwordAutoComplete="current-password"
-            />
-          </CardContent>
-        </Card>
-      </TabsContent>
+      <Tabs value={mode} onValueChange={(value) => setMode(value as Mode)}>
+        <TabsList className="w-full">
+          <TabsTrigger value="sign-in">Sign in</TabsTrigger>
+          <TabsTrigger value="sign-up">Create account</TabsTrigger>
+        </TabsList>
 
-      <TabsContent value="sign-up">
-        <Card>
-          <CardHeader>
-            <CardTitle>Create an account</CardTitle>
-            <CardDescription>It takes a few seconds; no email confirmation locally.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <AuthForm
-              action={signUpAction}
-              state={signUpState}
-              pending={signingUp}
-              submitLabel="Create account"
-              passwordAutoComplete="new-password"
-              passwordHint="At least 6 characters."
-            />
-          </CardContent>
-        </Card>
-      </TabsContent>
-    </Tabs>
+        <TabsContent value="sign-in" className="pt-4">
+          <AuthForm
+            action={signInAction}
+            state={signInState}
+            pending={signingIn}
+            submitLabel="Sign in"
+            passwordAutoComplete="current-password"
+          />
+        </TabsContent>
+        <TabsContent value="sign-up" className="pt-4">
+          <AuthForm
+            action={signUpAction}
+            state={signUpState}
+            pending={signingUp}
+            submitLabel="Create account"
+            passwordAutoComplete="new-password"
+            passwordHint="At least 6 characters. No email confirmation needed locally."
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
 
@@ -99,6 +96,7 @@ function AuthForm({
             placeholder="you@example.com"
             autoComplete="email"
             defaultValue={state.email}
+            className="h-10"
             required
           />
         </Field>
@@ -110,13 +108,15 @@ function AuthForm({
             type="password"
             autoComplete={passwordAutoComplete}
             minLength={6}
+            className="h-10"
             required
           />
           {passwordHint && <FieldDescription>{passwordHint}</FieldDescription>}
         </Field>
-        <Button type="submit" size="lg" disabled={pending} className="w-full">
-          {pending && <Spinner />}
+        <Button type="submit" disabled={pending} className="h-10 w-full">
+          {pending ? <Spinner /> : null}
           {submitLabel}
+          {!pending && <ArrowRightIcon />}
         </Button>
       </FieldGroup>
     </form>
